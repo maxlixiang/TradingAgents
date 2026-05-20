@@ -11,7 +11,10 @@ from tradingagents.agents.utils.fundamental_data_tools import (
     get_fundamentals,
     get_balance_sheet,
     get_cashflow,
-    get_income_statement
+    get_income_statement,
+    get_alpha_vantage_fundamentals_summary,
+    get_sec_edgar_latest_filings_summary,
+    get_company_ir_events,
 )
 from tradingagents.agents.utils.news_data_tools import (
     get_news,

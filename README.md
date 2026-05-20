@@ -93,14 +93,27 @@ RSSHub 新闻模块会做：
 - 去重。
 - 保留标题、来源、发布时间、链接、摘要。
 - 按类别输出给 News Analyst，包括市场宏观、中文财经、AI/科技、央行利率、股票快讯、地缘政治等。
+- 预抓取结果会强制注入 News Analyst 上下文，并在最终 `news.md` 末尾追加“RSSHub 原始来源表”，便于审计哪些 RSS 条目进入了模型。
+
+### 4. 增强基本面来源强制注入
+
+Fundamentals Analyst 不再完全依赖模型自行决定是否调用增强工具。当前流程会在分析前预抓取：
+
+```text
+Alpha Vantage fundamentals supplement
+SEC EDGAR latest filings
+Company Investor Relations events
+```
+
+这些内容会被强制注入 Fundamentals Analyst 上下文，并在最终 `fundamentals.md` 末尾追加“增强基本面原始来源”，便于检查 Alpha Vantage、SEC EDGAR 和公司 IR 到底返回了什么。
 
 ## 当前各模块数据能力判断
 
 | 分析模块 | 当前能力 | 说明 |
 | --- | --- | --- |
-| `news.md` | 已增强 | 当前使用 yfinance/global news + RSSHub/newsnow。RSSHub 覆盖 Bloomberg Markets、腾讯财经、华尔街见闻 AI、TechCrunch、MIT Technology Review、FastBull、Al Jazeera、Foreign Policy、The Diplomat、新华社等来源。 |
+| `news.md` | 已增强 | 当前使用 yfinance/global news + 预抓取 RSSHub/newsnow。RSSHub 覆盖 Bloomberg Markets、腾讯财经、华尔街见闻 AI、TechCrunch、MIT Technology Review、FastBull、Al Jazeera、Foreign Policy、The Diplomat、新华社等来源，并在报告末尾保留原始来源表。 |
 | `market.md` | 基础可用 | 仍以 yfinance/Alpha Vantage 类结构化行情为核心，可用于 OHLCV、均线、MACD、RSI、ATR 等技术指标。RSS 只能解释行情，不能替代价格和成交量数据。 |
-| `fundamentals.md` | 已明显增强 | 当前使用 yfinance + Alpha Vantage + SEC EDGAR + Company IR registry。能支撑结构化财务、官方文件链接和部分管理层材料入口。 |
+| `fundamentals.md` | 已明显增强 | 当前使用 yfinance + 预抓取 Alpha Vantage + SEC EDGAR + Company IR registry。能支撑结构化财务、官方文件链接和部分管理层材料入口，并在报告末尾保留增强来源原始返回。 |
 | `sentiment.md` | 英文情绪基础可用，中文情绪不足 | 当前已有新闻标题、StockTwits、Reddit。尚未接入雪球、东方财富股吧、富途、老虎社区等中文散户/交易社区。 |
 | 后续研究、交易、风险、组合经理 | 依赖前端输入质量 | 多空辩论和最终决策链可以运行，但结论质量取决于 news、market、fundamentals、sentiment 四类输入的完整性。 |
 
@@ -110,7 +123,7 @@ RSSHub 新闻模块会做：
 - 电话会纪要尚未接入：包括 earnings call transcript、管理层 Q&A、分析师问答。
 - 分析师预期修正尚未接入：例如 EPS/revenue estimate revisions、评级变化、目标价变化。
 - IR presentation 目前主要抓链接，尚未完整解析 PDF 或页面正文。
-- RSSHub 新闻源已经接入 News Analyst，但还没有做更复杂的“事件聚类”和“同一事件多源合并”。
+- RSSHub 新闻源已经接入 News Analyst，并会保留原始来源表；但还没有做更复杂的“事件聚类”和“同一事件多源合并”。
 - 非美股公司的官方披露源还不完整。美股优先走 SEC EDGAR，其他市场后续需要单独设计。
 
 ## 安装
@@ -246,12 +259,12 @@ get_company_ir_events
 
 下一步建议按这个顺序继续改：
 
-1. 给 RSSHub 新闻增加原始抓取缓存，保存每次进入 prompt 的 RSS item。
-2. 接入中文社区情绪源：雪球、东方财富、富途、老虎。
-3. 接入 earnings call transcript。
-4. 解析 IR presentation PDF，而不是只抓链接。
-5. 对 RSSHub 新闻做事件聚类，减少重复新闻。
-6. 给每份报告增加“数据来源清单”和“不可用数据源清单”。
+1. 接入中文社区情绪源：雪球、东方财富、富途、老虎。
+2. 接入 earnings call transcript。
+3. 解析 IR presentation PDF，而不是只抓链接。
+4. 对 RSSHub 新闻做事件聚类，减少重复新闻。
+5. 给每份报告增加统一的“数据来源清单”和“不可用数据源清单”。
+6. 给 RSSHub/SEC/IR 原始输入增加本地缓存，便于离线复现报告。
 
 ## 上游项目
 

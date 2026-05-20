@@ -17,16 +17,19 @@ def create_news_analyst(llm):
         instrument_context = build_instrument_context(
             state["company_of_interest"], asset_type
         )
+        ticker = state["company_of_interest"]
+        rsshub_block = get_rsshub_news.func(ticker, current_date, 7, 30)
 
         tools = [
             get_news,
             get_global_news,
-            get_rsshub_news,
         ]
 
         system_message = (
-            f"You are a news researcher tasked with analyzing recent news and trends over the past week. Please write a comprehensive report of the current state of the world that is relevant for trading and macroeconomics. Use the available tools: get_news(query, start_date, end_date) for {asset_label}-specific or targeted news searches, get_global_news(curr_date, look_back_days, limit) for broader macroeconomic news, and get_rsshub_news(ticker, curr_date, look_back_days, limit) for the curated RSSHub/newsnow supplement spanning markets, Chinese finance, AI/technology, central banks, equities, and geopolitics. Treat RSSHub items as source-linked context and cite concrete publishers/links when they materially support a claim. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."
+            f"You are a news researcher tasked with analyzing recent news and trends over the past week. Please write a comprehensive report of the current state of the world that is relevant for trading and macroeconomics. Use the available tools: get_news(query, start_date, end_date) for {asset_label}-specific or targeted news searches, and get_global_news(curr_date, look_back_days, limit) for broader macroeconomic news. A curated RSSHub/newsnow supplement has already been fetched and injected below; use it as source-linked context spanning markets, Chinese finance, AI/technology, central banks, equities, and geopolitics. Cite concrete publishers/links when RSSHub items materially support a claim. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
+            + "\n\n## Pre-fetched RSSHub/newsnow source evidence\n"
+            + rsshub_block
             + get_language_instruction()
         )
 
@@ -59,6 +62,14 @@ def create_news_analyst(llm):
 
         if len(result.tool_calls) == 0:
             report = result.content
+            if "RSSHub 原始来源" not in report:
+                report += (
+                    "\n\n---\n\n"
+                    "## RSSHub 原始来源表\n\n"
+                    "以下为本轮 News Analyst 预抓取并注入模型上下文的 RSSHub/newsnow 条目，"
+                    "用于审计新闻输入来源。\n\n"
+                    f"{rsshub_block}"
+                )
 
         return {
             "messages": [result],

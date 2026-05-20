@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -34,6 +35,7 @@ from tradingagents.llm_clients.model_catalog import get_model_options
 
 
 MAX_TELEGRAM_FILE_BYTES = 45 * 1024 * 1024
+PROGRESS_UPDATE_INTERVAL_SECONDS = 20
 ANALYST_LABELS = {
     "market": "Market Analyst",
     "social": "Sentiment Analyst",
@@ -140,6 +142,83 @@ def _format_elapsed(seconds: float) -> str:
     minutes = int(seconds // 60)
     secs = int(seconds % 60)
     return f"{minutes:02d}:{secs:02d}"
+
+
+def _progress_percent(elapsed_seconds: float, depth: int) -> int:
+    expected_seconds = max(1, depth) * 8 * 60
+    return min(94, max(3, int(3 + (elapsed_seconds / expected_seconds) * 86)))
+
+
+def _progress_stage(percent: int) -> str:
+    if percent < 12:
+        return "初始化分析图与数据源"
+    if percent < 32:
+        return "拉取行情、新闻、基本面与情绪数据"
+    if percent < 58:
+        return "生成分析师报告"
+    if percent < 78:
+        return "研究员辩论与交易计划生成"
+    if percent < 92:
+        return "风险讨论与组合经理决策"
+    return "整理报告并等待任务完成"
+
+
+def _progress_bar(percent: int, width: int = 18) -> str:
+    filled = max(0, min(width, round(width * percent / 100)))
+    return "#" * filled + "-" * (width - filled)
+
+
+def _format_progress_message(ticker: str, started_at: float, depth: int, percent: int | None = None) -> str:
+    elapsed = time.time() - started_at
+    current_percent = 100 if percent is None else percent
+    stage = "分析完成，正在发送报告" if current_percent >= 100 else _progress_stage(current_percent)
+    return (
+        f"分析进度：{ticker}\n"
+        f"[{_progress_bar(current_percent)}] {current_percent}%\n"
+        f"阶段：{stage}\n"
+        f"已用时：{_format_elapsed(elapsed)}\n"
+        "说明：进度按任务运行状态估算，完成后会自动更新为 100%。"
+    )
+
+
+async def _run_progress_loop(progress_message, ticker: str, started_at: float, depth: int, stop_event: asyncio.Event) -> None:
+    last_text = ""
+    while not stop_event.is_set():
+        percent = _progress_percent(time.time() - started_at, depth)
+        text = _format_progress_message(ticker, started_at, depth, percent)
+        if text != last_text:
+            try:
+                await progress_message.edit_text(text)
+                last_text = text
+            except TelegramError:
+                pass
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=PROGRESS_UPDATE_INTERVAL_SECONDS)
+        except asyncio.TimeoutError:
+            continue
+
+
+async def _finish_progress(progress_task: asyncio.Task | None, stop_event: asyncio.Event | None, progress_message, ticker: str, started_at: float, depth: int, failed: bool = False) -> None:
+    if stop_event:
+        stop_event.set()
+    if progress_task:
+        try:
+            await progress_task
+        except Exception:
+            pass
+    if progress_message:
+        try:
+            if failed:
+                await progress_message.edit_text(
+                    f"分析进度：{ticker}\n"
+                    f"[{_progress_bar(100)}] 已停止\n"
+                    f"阶段：任务失败\n"
+                    f"已用时：{_format_elapsed(time.time() - started_at)}"
+                )
+            else:
+                await progress_message.edit_text(_format_progress_message(ticker, started_at, depth, None))
+        except TelegramError:
+            pass
 
 
 def _user_id(update: Update) -> int | None:
@@ -358,6 +437,13 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"analysts={options['analysts']}，depth={options['depth']}。\n"
             "任务可能需要数分钟，请稍候。"
         )
+        stop_event = asyncio.Event()
+        progress_message = await update.effective_message.reply_text(
+            _format_progress_message(options["ticker"], started_at, options["depth"], 3)
+        )
+        progress_task = asyncio.create_task(
+            _run_progress_loop(progress_message, options["ticker"], started_at, options["depth"], stop_event)
+        )
 
         try:
             result = await asyncio.to_thread(
@@ -370,6 +456,15 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 results_dir=_reports_dir(),
             )
         except Exception as exc:
+            await _finish_progress(
+                progress_task,
+                stop_event,
+                progress_message,
+                options["ticker"],
+                started_at,
+                options["depth"],
+                failed=True,
+            )
             await update.effective_message.reply_text(
                 "分析失败。\n"
                 f"错误：{type(exc).__name__}: {exc}\n"
@@ -380,6 +475,14 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             JOB_STATE.current_ticker = None
             JOB_STATE.current_started_at = None
 
+        await _finish_progress(
+            progress_task,
+            stop_event,
+            progress_message,
+            result.ticker,
+            started_at,
+            options["depth"],
+        )
         JOB_STATE.latest_report = result.complete_report_path
         elapsed = _format_elapsed(time.time() - started_at)
         await update.effective_message.reply_text(
@@ -598,6 +701,13 @@ async def _run_session_analysis(update: Update, session: dict[str, Any]) -> None
             f"研究深度：{session['depth']}\n"
             f"LLM：{session['llm_provider']} / quick={session['quick_model']} / deep={session['deep_model']}"
         )
+        stop_event = asyncio.Event()
+        progress_message = await message.reply_text(
+            _format_progress_message(session["ticker"], started_at, session["depth"], 3)
+        )
+        progress_task = asyncio.create_task(
+            _run_progress_loop(progress_message, session["ticker"], started_at, session["depth"], stop_event)
+        )
         try:
             result = await asyncio.to_thread(
                 run_analysis_job,
@@ -614,6 +724,15 @@ async def _run_session_analysis(update: Update, session: dict[str, Any]) -> None
                 results_dir=_reports_dir(),
             )
         except Exception as exc:
+            await _finish_progress(
+                progress_task,
+                stop_event,
+                progress_message,
+                session["ticker"],
+                started_at,
+                session["depth"],
+                failed=True,
+            )
             await message.reply_text(
                 "分析失败。\n"
                 f"错误：{type(exc).__name__}: {exc}\n"
@@ -624,6 +743,14 @@ async def _run_session_analysis(update: Update, session: dict[str, Any]) -> None
             JOB_STATE.current_ticker = None
             JOB_STATE.current_started_at = None
 
+        await _finish_progress(
+            progress_task,
+            stop_event,
+            progress_message,
+            result.ticker,
+            started_at,
+            session["depth"],
+        )
         JOB_STATE.latest_report = result.complete_report_path
         elapsed = _format_elapsed(time.time() - started_at)
         await message.reply_text(

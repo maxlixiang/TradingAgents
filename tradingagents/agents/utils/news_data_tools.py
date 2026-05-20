@@ -1,6 +1,7 @@
 from langchain_core.tools import tool
 from typing import Annotated, Optional
 from tradingagents.dataflows.interface import route_to_vendor
+from tradingagents.dataflows.rsshub_news import get_rsshub_news as fetch_rsshub_news
 
 @tool
 def get_news(
@@ -41,6 +42,21 @@ def get_global_news(
         str: A formatted string containing global news data
     """
     return route_to_vendor("get_global_news", curr_date, look_back_days, limit)
+
+
+@tool
+def get_rsshub_news(
+    ticker: Annotated[str, "Ticker symbol"],
+    curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
+    look_back_days: Annotated[int, "Days to look back"] = 7,
+    limit: Annotated[int, "Maximum ranked RSSHub items to return"] = 30,
+) -> str:
+    """
+    Retrieve supplemental curated RSSHub/newsnow articles for company,
+    macro, AI/technology, rates, equities, and geopolitical context.
+    Returns source-linked Markdown suitable for audit-friendly news reports.
+    """
+    return fetch_rsshub_news(ticker, curr_date, look_back_days, limit)
 
 @tool
 def get_insider_transactions(

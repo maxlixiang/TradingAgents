@@ -43,7 +43,7 @@ get_company_ir_events
 NVDA, AAPL, MSFT, GOOG, GOOGL, AMZN, META, TSLA, AMD, INTC, AVGO
 ```
 
-如果某个 ticker 没有配置公司 IR 源，程序会明确提示使用 SEC EDGAR 作为官方兜底源。
+如果某个 ticker 没有手写配置公司 IR 源，程序会先尝试自动发现常见 IR 站点，例如 `investors.<company>.com`、`ir.<company>.com`、`www.<company>.com/investor-relations`。自动发现结果会带有提示，提醒用户核验页面归属；如果发现失败，程序会明确提示使用 SEC EDGAR 作为官方兜底源。
 
 ### 3. RSSHub/newsnow 新闻源增强
 
@@ -89,7 +89,9 @@ RSSHUB_BASE_URL=https://your-rsshub.example.com
 RSSHub 新闻模块会做：
 
 - 最近 7 天时间窗口过滤。
-- 按 ticker、公司名、行业关键词、宏观关键词打分。
+- 按 ticker、公司名、行业关键词、中文别名、宏观关键词打分。
+- 对未手写配置的 ticker，会尝试从 yfinance 公司资料自动扩展公司名、行业、板块关键词。
+- 对部分行业会自动补充中文语义词，例如 semiconductor 会补充“芯片、半导体”，memory/storage 会补充“存储、内存、闪存、存储芯片、SSD”等。
 - 去重。
 - 保留标题、来源、发布时间、链接、摘要。
 - 按类别输出给 News Analyst，包括市场宏观、中文财经、AI/科技、央行利率、股票快讯、地缘政治等。
@@ -110,7 +112,7 @@ Reddit
 
 ### 5. Market Analyst 行情与指标审计
 
-Market Analyst 仍然以结构化行情和技术指标为核心，不用 RSS 新闻替代价格和成交量数据。当前最终 `market.md` 会追加“Market 原始行情与指标表”，默认保留最近 30 天：
+Market Analyst 仍然以结构化行情和技术指标为核心，不用 RSS 新闻替代价格和成交量数据。当前最终 `market.md` 会追加“Market 原始行情与指标表”，默认保留最近 30 天 OHLCV，并优先审计模型实际调用过的 `get_indicators` 指标；如果无法识别实际调用，则回退到默认核心指标：
 
 ```text
 OHLCV
@@ -125,6 +127,8 @@ boll_lb
 ```
 
 这样可以直接检查技术分析报告使用了哪些行情窗口和指标值。
+
+如果模型实际使用了 `macdh`、`atr`、`vwma`、`mfi` 等指标，审计表也会尽量跟随实际调用补充这些指标，避免报告正文和附录不一致。
 
 ### 6. 增强基本面来源强制注入
 
@@ -142,9 +146,9 @@ Company Investor Relations events
 
 | 分析模块 | 当前能力 | 说明 |
 | --- | --- | --- |
-| `news.md` | 已增强 | 当前使用 yfinance/global news + 预抓取 RSSHub/newsnow。RSSHub 覆盖 Bloomberg Markets、腾讯财经、华尔街见闻 AI、TechCrunch、MIT Technology Review、FastBull、Al Jazeera、Foreign Policy、The Diplomat、新华社等来源，并在报告末尾保留原始来源表。 |
-| `market.md` | 基础可用，已增加审计表 | 仍以 yfinance/Alpha Vantage 类结构化行情为核心，可用于 OHLCV、均线、MACD、RSI、ATR 等技术指标。RSS 只能解释行情，不能替代价格和成交量数据。最终报告会追加原始 OHLCV 和核心指标表。 |
-| `fundamentals.md` | 已明显增强 | 当前使用 yfinance + 预抓取 Alpha Vantage + SEC EDGAR + Company IR registry。能支撑结构化财务、官方文件链接和部分管理层材料入口，并在报告末尾保留增强来源原始返回。 |
+| `news.md` | 已增强 | 当前使用 yfinance/global news + 预抓取 RSSHub/newsnow。RSSHub 覆盖 Bloomberg Markets、腾讯财经、华尔街见闻 AI、TechCrunch、MIT Technology Review、FastBull、Al Jazeera、Foreign Policy、The Diplomat、新华社等来源，并在报告末尾保留原始来源表。对非默认 ticker 会自动补充公司名、行业词和部分中文关键词。 |
+| `market.md` | 基础可用，已增加审计表 | 仍以 yfinance/Alpha Vantage 类结构化行情为核心，可用于 OHLCV、均线、MACD、RSI、ATR 等技术指标。RSS 只能解释行情，不能替代价格和成交量数据。最终报告会追加原始 OHLCV 和模型实际调用过的核心指标表。 |
+| `fundamentals.md` | 已明显增强 | 当前使用 yfinance + 预抓取 Alpha Vantage + SEC EDGAR + Company IR registry/自动 IR 发现。能支撑结构化财务、官方文件链接和部分管理层材料入口，并在报告末尾保留增强来源原始返回。 |
 | `sentiment.md` | 已增强媒体叙事，社区情绪仍待扩展 | 当前使用 Yahoo/yfinance news + RSSHub/newsnow + StockTwits + Reddit。RSSHub/newsnow 已补充中文财经和宏观/AI/地缘叙事，并在报告末尾保留原始来源表；雪球、东方财富股吧、富途、老虎社区等中文散户/交易社区尚未接入。 |
 | 后续研究、交易、风险、组合经理 | 依赖前端输入质量 | 多空辩论和最终决策链可以运行，但结论质量取决于 news、market、fundamentals、sentiment 四类输入的完整性。 |
 
@@ -155,7 +159,7 @@ Company Investor Relations events
 - 分析师预期修正尚未接入：例如 EPS/revenue estimate revisions、评级变化、目标价变化。
 - IR presentation 目前主要抓链接，尚未完整解析 PDF 或页面正文。
 - RSSHub 新闻源已经接入 News Analyst 和 Sentiment Analyst，并会保留原始来源表；但还没有做更复杂的“事件聚类”和“同一事件多源合并”。
-- 非美股公司的官方披露源还不完整。美股优先走 SEC EDGAR，其他市场后续需要单独设计。
+- 非美股公司的官方披露源还不完整。美股优先走 SEC EDGAR，并尝试自动发现 IR 页面；其他市场后续需要单独设计。
 
 ## 安装
 
@@ -270,6 +274,8 @@ get_rsshub_news
 - 中东、俄乌、美国政策、中国政策、出口管制等地缘风险。
 - 中文财经媒体视角。
 
+对未在手写关键词表中的 ticker，RSSHub 模块会尝试从公司资料自动生成关键词；对 SNDK 这类存储公司，会覆盖 `Sandisk`、`闪迪`、`NAND`、`flash storage`、`memory`、`存储`、`闪存`、`固态硬盘` 等中英文关键词。
+
 ### Fundamentals Analyst
 
 当前 Fundamentals Analyst 会使用：
@@ -285,6 +291,8 @@ get_company_ir_events
 ```
 
 其中 yfinance 提供基础财务，Alpha Vantage 提供结构化补充，SEC EDGAR 提供官方披露兜底，公司 IR registry 提供官方财报新闻稿和 presentation 入口。
+
+对于不在默认 IR registry 中的 ticker，程序会进行 best-effort 自动发现。自动发现成功时，报告中会标记 `auto-discovered IR source`；自动发现失败时，仍会使用 SEC EDGAR 作为官方兜底。
 
 ### Sentiment Analyst
 
@@ -309,6 +317,8 @@ get_indicators
 ```
 
 最终 `market.md` 会追加最近 30 天 OHLCV 和核心指标审计表，方便回看模型对价格趋势、动量和波动率的判断依据。
+
+审计表优先读取本轮 Market Analyst 实际调用过的 `get_indicators` 参数，避免正文使用 `macdh`、`atr` 等指标但附录没有对应原始值。
 
 ## 后续优先级
 

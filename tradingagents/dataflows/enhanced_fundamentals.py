@@ -24,6 +24,15 @@ from .alpha_vantage_common import API_BASE_URL, get_api_key
 _SEC_SUBMISSIONS = "https://data.sec.gov/submissions/CIK{cik}.json"
 _SEC_COMPANY_TICKERS = "https://www.sec.gov/files/company_tickers.json"
 _SEC_ARCHIVES = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{document}"
+_COMMON_IR_PATHS = (
+    "",
+    "/investor-relations",
+    "/investors",
+    "/ir",
+    "/financials",
+    "/news-events",
+    "/events-and-presentations",
+)
 _DEFAULT_IR_KEYWORDS = (
     "financial results",
     "quarter",
@@ -307,6 +316,16 @@ def get_alpha_vantage_fundamentals_summary(ticker: str, curr_date: str | None = 
     return "\n".join(sections)
 
 
+def _sec_company_record(ticker: str) -> dict[str, Any] | None:
+    ticker_upper = ticker.upper()
+    data = _get_json(_SEC_COMPANY_TICKERS)
+    if isinstance(data, dict):
+        for entry in data.values():
+            if isinstance(entry, dict) and entry.get("ticker", "").upper() == ticker_upper:
+                return entry
+    return None
+
+
 def _resolve_cik(ticker: str) -> str | None:
     ticker_upper = ticker.upper()
     known = {
@@ -314,11 +333,9 @@ def _resolve_cik(ticker: str) -> str | None:
     }
     if ticker_upper in known:
         return known[ticker_upper]
-    data = _get_json(_SEC_COMPANY_TICKERS)
-    if isinstance(data, dict):
-        for entry in data.values():
-            if isinstance(entry, dict) and entry.get("ticker", "").upper() == ticker_upper:
-                return f"{int(entry['cik_str']):010d}"
+    record = _sec_company_record(ticker_upper)
+    if record:
+        return f"{int(record['cik_str']):010d}"
     return None
 
 
@@ -429,6 +446,108 @@ def _resolve_ir_source(ticker: str) -> dict[str, Any] | None:
     return source
 
 
+def _discover_ir_source(ticker: str) -> dict[str, Any] | None:
+    ticker_upper = ticker.upper()
+    company_name = _company_name_for_ticker(ticker_upper)
+    slugs = _company_slugs(company_name or ticker_upper)
+    candidates = []
+    for slug in slugs:
+        candidates.extend(
+            [
+                f"https://investors.{slug}.com",
+                f"https://ir.{slug}.com",
+                f"https://investor.{slug}.com",
+                f"https://www.{slug}.com/investor-relations",
+                f"https://www.{slug}.com/investors",
+            ]
+        )
+
+    for url in dict.fromkeys(candidates):
+        try:
+            html_text = _get_text(url, timeout=8.0)
+        except Exception:
+            continue
+        if not _looks_like_ir_page(html_text, company_name or ticker_upper):
+            continue
+        return {
+            "name": f"{company_name or ticker_upper} Investor Relations (auto-discovered)",
+            "auto_discovered": True,
+            "pages": _build_auto_ir_pages(url),
+            "keywords": _DEFAULT_IR_KEYWORDS + tuple(_company_keyword_variants(company_name or ticker_upper)),
+        }
+    return None
+
+
+def _company_name_for_ticker(ticker_upper: str) -> str | None:
+    try:
+        record = _sec_company_record(ticker_upper)
+        title = record.get("title") if record else None
+        if isinstance(title, str) and title.strip():
+            return title.strip()
+    except Exception:
+        pass
+    try:
+        import yfinance as yf
+
+        info = yf.Ticker(ticker_upper).info or {}
+        for key in ("longName", "shortName", "displayName"):
+            value = info.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _company_slugs(name: str) -> list[str]:
+    base = re.sub(
+        r"\b(incorporated|inc\.?|corp\.?|corporation|company|co\.?|ltd\.?|limited|plc|class\s+[a-z])\b",
+        " ",
+        name,
+        flags=re.IGNORECASE,
+    )
+    words = [word.lower() for word in re.split(r"[^A-Za-z0-9]+", base) if len(word) >= 2]
+    if not words:
+        return []
+    joined = "".join(words)
+    dashed = "-".join(words)
+    return list(dict.fromkeys([joined, dashed, words[0]]))
+
+
+def _company_keyword_variants(name: str) -> list[str]:
+    variants = [name]
+    for slug in _company_slugs(name):
+        variants.append(slug)
+        variants.append(slug.replace("-", " "))
+    return list(dict.fromkeys(v for v in variants if v))
+
+
+def _looks_like_ir_page(html_text: str, company_name: str) -> bool:
+    text = _strip_html(html_text, limit=8000).lower()
+    ir_terms = (
+        "investor relations",
+        "investors",
+        "sec filings",
+        "financial results",
+        "quarterly results",
+        "earnings",
+        "annual report",
+        "stock information",
+    )
+    if not any(term in text for term in ir_terms):
+        return False
+    name_tokens = [t.lower() for t in re.split(r"[^A-Za-z0-9]+", company_name) if len(t) >= 4]
+    return not name_tokens or any(token in text for token in name_tokens[:3])
+
+
+def _build_auto_ir_pages(base_url: str) -> dict[str, str]:
+    root = base_url.rstrip("/")
+    pages = {"Auto-discovered IR home": root}
+    for path in _COMMON_IR_PATHS[1:]:
+        pages[f"Potential IR path {path}"] = root + path
+    return pages
+
+
 def get_company_ir_events(ticker: str, curr_date: str | None = None) -> str:
     """Fetch official company IR links for earnings, presentations, and RSS.
 
@@ -439,9 +558,11 @@ def get_company_ir_events(ticker: str, curr_date: str | None = None) -> str:
     ticker_upper = ticker.upper()
     source = _resolve_ir_source(ticker_upper)
     if not source:
+        source = _discover_ir_source(ticker_upper)
+    if not source:
         return (
             f"## Company Investor Relations for {ticker_upper}\n"
-            "<no configured company IR source; use SEC EDGAR filings as the official fallback>"
+            "<no configured or auto-discovered company IR source; use SEC EDGAR filings as the official fallback>"
         )
 
     name = source["name"]
@@ -449,6 +570,11 @@ def get_company_ir_events(ticker: str, curr_date: str | None = None) -> str:
     result = [f"## {name} Supplement for {ticker_upper}"]
     if curr_date:
         result.append(f"Simulation date: {curr_date}")
+    if source.get("auto_discovered"):
+        result.append(
+            "\n<auto-discovered IR source: verify the page belongs to the issuer; "
+            "SEC EDGAR remains the official fallback if links are sparse or stale>"
+        )
 
     pages = source.get("pages") or {}
     seen_urls: set[str] = set()

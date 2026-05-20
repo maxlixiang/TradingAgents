@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from tradingagents.agents.utils.agent_utils import (
@@ -102,6 +103,8 @@ Volume-Based Indicators:
                     + _build_market_audit_appendix(
                         ticker=state["company_of_interest"],
                         current_date=current_date,
+                        messages=state["messages"],
+                        report=report,
                     )
                 )
 
@@ -113,9 +116,16 @@ Volume-Based Indicators:
     return market_analyst_node
 
 
-def _build_market_audit_appendix(*, ticker: str, current_date: str) -> str:
+def _build_market_audit_appendix(
+    *,
+    ticker: str,
+    current_date: str,
+    messages: list[Any],
+    report: str,
+) -> str:
     """Build a compact appendix with the market data injected through tools."""
     start_date = _days_back(current_date, 30)
+    audit_indicators = _extract_market_audit_indicators(messages, report)
     stock_block = _safe_tool_call(
         lambda: get_stock_data.func(ticker, start_date, current_date),
         f"OHLCV data unavailable for {ticker} from {start_date} to {current_date}.",
@@ -123,7 +133,7 @@ def _build_market_audit_appendix(*, ticker: str, current_date: str) -> str:
     indicator_block = _safe_tool_call(
         lambda: get_indicators.func(
             ticker,
-            ",".join(DEFAULT_MARKET_AUDIT_INDICATORS),
+            ",".join(audit_indicators),
             current_date,
             30,
         ),
@@ -136,12 +146,66 @@ def _build_market_audit_appendix(*, ticker: str, current_date: str) -> str:
         "行情源和指标源遵循当前配置的 data vendor，通常优先使用 yfinance，并在可用时按配置回退。\n\n"
         f"- Ticker: `{ticker}`\n"
         f"- Window: `{start_date}` to `{current_date}`\n"
-        f"- Indicator set: `{', '.join(DEFAULT_MARKET_AUDIT_INDICATORS)}`\n\n"
+        f"- Indicator set: `{', '.join(audit_indicators)}`\n"
+        "- Indicator selection source: actual `get_indicators` tool calls when available; "
+        "otherwise report text scan plus default audit set.\n\n"
         "### OHLCV\n\n"
         f"{stock_block}\n\n"
         "### Technical Indicators\n\n"
         f"{indicator_block}"
     )
+
+
+def _extract_market_audit_indicators(messages: list[Any], report: str) -> list[str]:
+    allowed_order = DEFAULT_MARKET_AUDIT_INDICATORS + ["macds", "macdh", "atr", "vwma", "mfi"]
+    allowed = set(allowed_order)
+    found: list[str] = []
+
+    for message in messages:
+        for call in getattr(message, "tool_calls", []) or []:
+            name = call.get("name") if isinstance(call, dict) else getattr(call, "name", "")
+            if name != "get_indicators":
+                continue
+            args = call.get("args") if isinstance(call, dict) else getattr(call, "args", {})
+            indicator_value = ""
+            if isinstance(args, dict):
+                indicator_value = str(args.get("indicator") or "")
+            else:
+                indicator_value = str(args or "")
+            for item in indicator_value.split(","):
+                indicator = item.strip().lower()
+                if indicator in allowed and indicator not in found:
+                    found.append(indicator)
+
+    lowered_report = report.lower()
+    for indicator in allowed_order:
+        if re_search_indicator(indicator, lowered_report) and indicator not in found:
+            found.append(indicator)
+
+    for indicator in DEFAULT_MARKET_AUDIT_INDICATORS:
+        if indicator not in found:
+            found.append(indicator)
+
+    return found[:10]
+
+
+def re_search_indicator(indicator: str, lowered_text: str) -> bool:
+    aliases = {
+        "close_10_ema": ("close_10_ema", "10 ema", "10日均线"),
+        "close_50_sma": ("close_50_sma", "50 sma", "50日均线"),
+        "close_200_sma": ("close_200_sma", "200 sma", "200日均线"),
+        "macd": ("macd",),
+        "macds": ("macds", "macd signal"),
+        "macdh": ("macdh", "macd histogram", "macd柱"),
+        "rsi": ("rsi",),
+        "boll": ("boll", "布林带中轨"),
+        "boll_ub": ("boll_ub", "布林带上轨"),
+        "boll_lb": ("boll_lb", "布林带下轨"),
+        "atr": ("atr", "平均真实波幅"),
+        "vwma": ("vwma",),
+        "mfi": ("mfi", "money flow index"),
+    }
+    return any(alias in lowered_text for alias in aliases.get(indicator, (indicator,)))
 
 
 def _safe_tool_call(fetcher, fallback: str) -> str:

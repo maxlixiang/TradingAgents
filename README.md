@@ -180,6 +180,87 @@ cp .env.example .env
 docker compose run --rm tradingagents
 ```
 
+## Telegram Bot 部署
+
+本仓库新增了 Telegram 长轮询机器人，适合部署到 VPS 后作为前端对话入口。机器人复用现有分析链路和报告保存逻辑，不需要域名、HTTPS 或 webhook。
+
+### 1. 配置 `.env`
+
+至少需要填写：
+
+```bash
+DEEPSEEK_API_KEY=...
+ALPHA_VANTAGE_API_KEY=...
+RSSHUB_BASE_URL=https://rss.cnnewsnow.com
+
+TRADINGAGENTS_LLM_PROVIDER=deepseek
+TRADINGAGENTS_QUICK_THINK_LLM=deepseek-v4-flash
+TRADINGAGENTS_DEEP_THINK_LLM=deepseek-v4-flash
+TRADINGAGENTS_OUTPUT_LANGUAGE=Chinese
+
+TELEGRAM_BOT_TOKEN=123456:your_bot_token
+TELEGRAM_ALLOWED_USER_IDS=123456789
+TELEGRAM_DEFAULT_ANALYSTS=market,social,news,fundamentals
+TELEGRAM_DEFAULT_DEPTH=1
+TELEGRAM_DEFAULT_OUTPUT_LANGUAGE=Chinese
+TELEGRAM_DEFAULT_LLM_PROVIDER=deepseek
+TELEGRAM_DEFAULT_QUICK_THINK_LLM=deepseek-v4-flash
+TELEGRAM_DEFAULT_DEEP_THINK_LLM=deepseek-v4-flash
+TELEGRAM_REPORTS_DIR=reports
+```
+
+`TELEGRAM_ALLOWED_USER_IDS` 是白名单，建议只填自己的 Telegram user id；多个用户可用英文逗号分隔。
+
+### 2. 启动机器人
+
+```bash
+docker compose build
+docker compose up -d telegram-bot
+```
+
+查看日志：
+
+```bash
+docker compose logs -f telegram-bot
+```
+
+保留原 CLI：
+
+```bash
+docker compose run --rm tradingagents
+```
+
+### 3. Telegram 命令
+
+```text
+/start
+/help
+/status
+/analyze NVDA
+/analyze SNDK --date 2026-05-20 --analysts market,news,fundamentals,social --depth 1
+/report latest
+```
+
+推荐使用 `/start` 进入向导模式：机器人会先提示“请输入您要分析的美股股票代码”，用户输入 ticker 后，后续步骤会用 Telegram 按钮完成：
+
+```text
+Step 2: Analysis Date
+Step 3: Output Language
+Step 4: Analysts Team
+Step 5: Research Depth
+Step 6: LLM Provider
+Step 7.1: Quick-Thinking LLM Engine
+Step 7.2: Deep-Thinking LLM Engine
+Confirm: Start Analysis
+```
+
+其中 Analysts Team 支持多选，按钮会用 `✅/⬜` 显示当前选择状态。`/analyze ...` 命令仍然保留，适合熟悉参数后快速触发。
+
+DeepSeek 模型选项已按官方最新接口文档更新为 `deepseek-v4-flash` 与 `deepseek-v4-pro`；旧的 `DeepSeek V3.2` / `deepseek-chat` / `deepseek-reasoner` 不再出现在选择菜单中。
+
+机器人同一时间只运行一个分析任务。分析完成后会返回最终建议、报告目录，并发送 `complete_report.md` 文件。
+Docker Compose 默认使用 named volume 持久化报告；日常查看以 Telegram 回传文件为主。
+
 ## API 配置
 
 复制 `.env.example` 为 `.env`，然后填写自己的 key：
@@ -188,6 +269,8 @@ docker compose run --rm tradingagents
 DEEPSEEK_API_KEY=...
 ALPHA_VANTAGE_API_KEY=...
 RSSHUB_BASE_URL=https://rss.cnnewsnow.com
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_ALLOWED_USER_IDS=...
 ```
 
 常用 LLM provider：

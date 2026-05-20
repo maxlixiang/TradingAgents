@@ -95,7 +95,38 @@ RSSHub 新闻模块会做：
 - 按类别输出给 News Analyst，包括市场宏观、中文财经、AI/科技、央行利率、股票快讯、地缘政治等。
 - 预抓取结果会强制注入 News Analyst 上下文，并在最终 `news.md` 末尾追加“RSSHub 原始来源表”，便于审计哪些 RSS 条目进入了模型。
 
-### 4. 增强基本面来源强制注入
+### 4. Sentiment Analyst 情绪源增强
+
+Sentiment Analyst 现在会在分析前预抓取四类输入：
+
+```text
+Yahoo/yfinance news
+RSSHub/newsnow
+StockTwits
+Reddit
+```
+
+其中 RSSHub/newsnow 用于补充中文财经媒体、AI/科技、宏观利率、股票快讯和地缘政治叙事；StockTwits 和 Reddit 仍作为散户/社区情绪输入。最终 `sentiment.md` 末尾会追加“Sentiment 原始来源表”，保留 Yahoo、RSSHub/newsnow、StockTwits、Reddit 的原始返回，便于审计模型依据。
+
+### 5. Market Analyst 行情与指标审计
+
+Market Analyst 仍然以结构化行情和技术指标为核心，不用 RSS 新闻替代价格和成交量数据。当前最终 `market.md` 会追加“Market 原始行情与指标表”，默认保留最近 30 天：
+
+```text
+OHLCV
+close_10_ema
+close_50_sma
+close_200_sma
+macd
+rsi
+boll
+boll_ub
+boll_lb
+```
+
+这样可以直接检查技术分析报告使用了哪些行情窗口和指标值。
+
+### 6. 增强基本面来源强制注入
 
 Fundamentals Analyst 不再完全依赖模型自行决定是否调用增强工具。当前流程会在分析前预抓取：
 
@@ -112,18 +143,18 @@ Company Investor Relations events
 | 分析模块 | 当前能力 | 说明 |
 | --- | --- | --- |
 | `news.md` | 已增强 | 当前使用 yfinance/global news + 预抓取 RSSHub/newsnow。RSSHub 覆盖 Bloomberg Markets、腾讯财经、华尔街见闻 AI、TechCrunch、MIT Technology Review、FastBull、Al Jazeera、Foreign Policy、The Diplomat、新华社等来源，并在报告末尾保留原始来源表。 |
-| `market.md` | 基础可用 | 仍以 yfinance/Alpha Vantage 类结构化行情为核心，可用于 OHLCV、均线、MACD、RSI、ATR 等技术指标。RSS 只能解释行情，不能替代价格和成交量数据。 |
+| `market.md` | 基础可用，已增加审计表 | 仍以 yfinance/Alpha Vantage 类结构化行情为核心，可用于 OHLCV、均线、MACD、RSI、ATR 等技术指标。RSS 只能解释行情，不能替代价格和成交量数据。最终报告会追加原始 OHLCV 和核心指标表。 |
 | `fundamentals.md` | 已明显增强 | 当前使用 yfinance + 预抓取 Alpha Vantage + SEC EDGAR + Company IR registry。能支撑结构化财务、官方文件链接和部分管理层材料入口，并在报告末尾保留增强来源原始返回。 |
-| `sentiment.md` | 英文情绪基础可用，中文情绪不足 | 当前已有新闻标题、StockTwits、Reddit。尚未接入雪球、东方财富股吧、富途、老虎社区等中文散户/交易社区。 |
+| `sentiment.md` | 已增强媒体叙事，社区情绪仍待扩展 | 当前使用 Yahoo/yfinance news + RSSHub/newsnow + StockTwits + Reddit。RSSHub/newsnow 已补充中文财经和宏观/AI/地缘叙事，并在报告末尾保留原始来源表；雪球、东方财富股吧、富途、老虎社区等中文散户/交易社区尚未接入。 |
 | 后续研究、交易、风险、组合经理 | 依赖前端输入质量 | 多空辩论和最终决策链可以运行，但结论质量取决于 news、market、fundamentals、sentiment 四类输入的完整性。 |
 
 ## 尚未完成的部分
 
-- 中文社区情绪源尚未接入：雪球、东方财富股吧、富途牛牛、老虎社区等。
+- 中文社区情绪源尚未接入：雪球、东方财富股吧、富途牛牛、老虎社区等。当前 RSSHub/newsnow 已补充中文媒体叙事，但还不能代表中文散户社区情绪。
 - 电话会纪要尚未接入：包括 earnings call transcript、管理层 Q&A、分析师问答。
 - 分析师预期修正尚未接入：例如 EPS/revenue estimate revisions、评级变化、目标价变化。
 - IR presentation 目前主要抓链接，尚未完整解析 PDF 或页面正文。
-- RSSHub 新闻源已经接入 News Analyst，并会保留原始来源表；但还没有做更复杂的“事件聚类”和“同一事件多源合并”。
+- RSSHub 新闻源已经接入 News Analyst 和 Sentiment Analyst，并会保留原始来源表；但还没有做更复杂的“事件聚类”和“同一事件多源合并”。
 - 非美股公司的官方披露源还不完整。美股优先走 SEC EDGAR，其他市场后续需要单独设计。
 
 ## 安装
@@ -193,7 +224,7 @@ Ticker: NVDA 或 AAPL
 LLM Provider: DeepSeek
 Quick model: deepseek-v4-flash
 Deep model: deepseek-v4-flash
-Analysts: 先选择 News + Fundamentals，确认数据源可用后再增加 Market 和 Sentiment
+Analysts: 先选择 News + Fundamentals，确认数据源可用后再增加 Market 和 Sentiment；全量运行会生成四类可审计 analyst 报告
 Research depth: Shallow
 Debate rounds: 1
 Risk rounds: 1
@@ -255,6 +286,30 @@ get_company_ir_events
 
 其中 yfinance 提供基础财务，Alpha Vantage 提供结构化补充，SEC EDGAR 提供官方披露兜底，公司 IR registry 提供官方财报新闻稿和 presentation 入口。
 
+### Sentiment Analyst
+
+当前 Sentiment Analyst 会预抓取：
+
+```text
+get_news
+get_rsshub_news
+fetch_stocktwits_messages
+fetch_reddit_posts
+```
+
+RSSHub/newsnow 在这里用于补充媒体叙事和中文财经视角；StockTwits/Reddit 用于观察散户交易情绪和社区讨论热度。最终 `sentiment.md` 会保留原始来源表。
+
+### Market Analyst
+
+当前 Market Analyst 会使用：
+
+```text
+get_stock_data
+get_indicators
+```
+
+最终 `market.md` 会追加最近 30 天 OHLCV 和核心指标审计表，方便回看模型对价格趋势、动量和波动率的判断依据。
+
 ## 后续优先级
 
 下一步建议按这个顺序继续改：
@@ -263,8 +318,8 @@ get_company_ir_events
 2. 接入 earnings call transcript。
 3. 解析 IR presentation PDF，而不是只抓链接。
 4. 对 RSSHub 新闻做事件聚类，减少重复新闻。
-5. 给每份报告增加统一的“数据来源清单”和“不可用数据源清单”。
-6. 给 RSSHub/SEC/IR 原始输入增加本地缓存，便于离线复现报告。
+5. 给每份报告增加统一的“不可用数据源清单”和异常提示。
+6. 给 RSSHub/SEC/IR/行情指标原始输入增加本地缓存，便于离线复现报告。
 
 ## 上游项目
 

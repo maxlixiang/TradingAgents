@@ -9,9 +9,10 @@ The redesigned agent pre-fetches three complementary data sources before
 the LLM is invoked and injects them into the prompt as structured blocks:
 
   1. News headlines     — Yahoo Finance (institutional framing)
-  2. StockTwits messages — retail-trader posts indexed by cashtag, with
+  2. RSSHub/newsnow     — curated finance, AI, macro, and Chinese media
+  3. StockTwits messages — retail-trader posts indexed by cashtag, with
                            user-labeled Bullish/Bearish sentiment tags
-  3. Reddit posts        — r/wallstreetbets, r/stocks, r/investing
+  4. Reddit posts        — r/wallstreetbets, r/stocks, r/investing
 
 The agent does not use tool-calling; the data is in the prompt from
 turn 0. The LLM produces the sentiment report in a single invocation.
@@ -26,6 +27,7 @@ from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
     get_news,
+    get_rsshub_news,
 )
 from tradingagents.dataflows.reddit import fetch_reddit_posts
 from tradingagents.dataflows.stocktwits import fetch_stocktwits_messages
@@ -49,10 +51,11 @@ def create_sentiment_analyst(llm):
         start_date = _seven_days_back(end_date)
         instrument_context = build_instrument_context(ticker)
 
-        # Pre-fetch all three sources. Each fetcher degrades gracefully and
+        # Pre-fetch all sources. Each fetcher degrades gracefully and
         # returns a string (no exceptions surface from here), so the LLM
         # always sees something — either real data or a clear placeholder.
         news_block = get_news.func(ticker, start_date, end_date)
+        rsshub_block = get_rsshub_news.func(ticker, end_date, 7, 30)
         stocktwits_block = fetch_stocktwits_messages(ticker, limit=30)
         reddit_block = fetch_reddit_posts(ticker)
 
@@ -61,6 +64,7 @@ def create_sentiment_analyst(llm):
             start_date=start_date,
             end_date=end_date,
             news_block=news_block,
+            rsshub_block=rsshub_block,
             stocktwits_block=stocktwits_block,
             reddit_block=reddit_block,
         )
@@ -87,10 +91,26 @@ def create_sentiment_analyst(llm):
         # call produces the report directly.
         chain = prompt | llm
         result = chain.invoke(state["messages"])
+        report = result.content
+        if "Sentiment 原始来源表" not in report:
+            report = (
+                report.rstrip()
+                + "\n\n## Sentiment 原始来源表\n\n"
+                + "以下为本轮 Sentiment Analyst 预抓取并注入模型上下文的新闻、RSSHub/newsnow、"
+                + "StockTwits 和 Reddit 原始输入，用于审计情绪判断来源。\n\n"
+                + "### Yahoo/yfinance News\n\n"
+                + news_block
+                + "\n\n### RSSHub/newsnow\n\n"
+                + rsshub_block
+                + "\n\n### StockTwits\n\n"
+                + stocktwits_block
+                + "\n\n### Reddit\n\n"
+                + reddit_block
+            )
 
         return {
             "messages": [result],
-            "sentiment_report": result.content,
+            "sentiment_report": report,
         }
 
     return sentiment_analyst_node
@@ -102,11 +122,12 @@ def _build_system_message(
     start_date: str,
     end_date: str,
     news_block: str,
+    rsshub_block: str,
     stocktwits_block: str,
     reddit_block: str,
 ) -> str:
     """Assemble the sentiment-analyst system message with structured data blocks."""
-    return f"""You are a financial market sentiment analyst. Your task is to produce a comprehensive sentiment report for {ticker} covering the period from {start_date} to {end_date}, drawing on three complementary data sources that have already been collected for you.
+    return f"""You are a financial market sentiment analyst. Your task is to produce a comprehensive sentiment report for {ticker} covering the period from {start_date} to {end_date}, drawing on four complementary data sources that have already been collected for you.
 
 ## Data sources (pre-fetched, in this prompt)
 
@@ -116,6 +137,13 @@ Institutional framing. Fact-driven, slower-moving signal.
 <start_of_news>
 {news_block}
 <end_of_news>
+
+### RSSHub/newsnow — curated finance, AI/technology, macro, and Chinese media
+Broader media narrative. Use this to capture Chinese finance coverage, AI supply-chain framing, central-bank/rates context, equities headlines, and geopolitical risk. Treat it as media sentiment and event context, not as a replacement for StockTwits/Reddit user sentiment.
+
+<start_of_rsshub_newsnow>
+{rsshub_block}
+<end_of_rsshub_newsnow>
 
 ### StockTwits messages — retail-trader social platform indexed by cashtag
 Fast-moving signal. Each message carries a user-labeled sentiment tag (Bullish / Bearish / no-label) plus the message body.
@@ -135,13 +163,13 @@ Community discussion. Engagement signal via upvote score and comment count. Subr
 
 1. **Read the StockTwits Bullish/Bearish ratio as a leading retail-sentiment signal.** A 70/30 bullish/bearish split is moderately bullish; ≥90/10 may indicate over-extension and contrarian risk; 50/50 is uncertainty. Sample size matters — base rates on the actual message count, not percentages alone.
 
-2. **Look for cross-source divergences.** If news framing is bearish but StockTwits is overwhelmingly bullish, that mismatch is itself a signal — it can mean retail is leaning into a thesis the news flow hasn't caught up to (or vice versa, that retail is chasing while institutions are cautious).
+2. **Look for cross-source divergences.** If Yahoo/RSSHub news framing is bearish but StockTwits is overwhelmingly bullish, that mismatch is itself a signal — it can mean retail is leaning into a thesis the news flow hasn't caught up to (or vice versa, that retail is chasing while institutions are cautious).
 
 3. **Weight Reddit posts by engagement.** A 400-upvote / 200-comment thread reflects community attention; a 3-upvote post is noise. Read the body excerpts for context — the title alone often misleads.
 
 4. **Distinguish opinion from event.** A news headline ("Nvidia announces $500M Corning deal") is an event; a StockTwits post ("buying NVDA, this is going to moon") is opinion. Both are inputs but should be weighted differently in your conclusions.
 
-5. **Identify recurring narrative themes.** What topic keeps coming up across sources? That's the dominant narrative driving current sentiment.
+5. **Identify recurring narrative themes.** What topic keeps coming up across Yahoo, RSSHub/newsnow, StockTwits, and Reddit? That's the dominant narrative driving current sentiment.
 
 6. **Be honest about data limits.** If StockTwits returned only a handful of messages, or one or more sources returned an "<unavailable>" placeholder, the sentiment read is less robust — flag this caveat explicitly. If the sources are silent on a given subreddit, say so.
 
@@ -154,7 +182,7 @@ Community discussion. Engagement signal via upvote score and comment count. Subr
 Produce a sentiment report covering, in order:
 
 1. **Overall sentiment direction** — Bullish / Bearish / Neutral / Mixed — with a brief confidence note based on data quality and sample size.
-2. **Source-by-source breakdown** — what each of news / StockTwits / Reddit is telling you, with specific evidence (cite message counts, ratios, notable posts).
+2. **Source-by-source breakdown** — what each of Yahoo/news, RSSHub/newsnow, StockTwits, and Reddit is telling you, with specific evidence (cite message counts, ratios, notable posts, and publisher names where useful).
 3. **Divergences, alignments, and key narratives** across sources.
 4. **Catalysts and risks** surfaced by the data.
 5. **Markdown table** at the end summarizing key sentiment signals, their direction, source, and supporting evidence.

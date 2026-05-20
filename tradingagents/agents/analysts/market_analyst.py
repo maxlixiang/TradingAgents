@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
@@ -5,7 +7,18 @@ from tradingagents.agents.utils.agent_utils import (
     get_language_instruction,
     get_stock_data,
 )
-from tradingagents.dataflows.config import get_config
+
+
+DEFAULT_MARKET_AUDIT_INDICATORS = [
+    "close_10_ema",
+    "close_50_sma",
+    "close_200_sma",
+    "macd",
+    "rsi",
+    "boll",
+    "boll_ub",
+    "boll_lb",
+]
 
 
 def create_market_analyst(llm):
@@ -82,6 +95,15 @@ Volume-Based Indicators:
 
         if len(result.tool_calls) == 0:
             report = result.content
+            if "Market 原始行情与指标表" not in report:
+                report = (
+                    report.rstrip()
+                    + "\n\n"
+                    + _build_market_audit_appendix(
+                        ticker=state["company_of_interest"],
+                        current_date=current_date,
+                    )
+                )
 
         return {
             "messages": [result],
@@ -89,3 +111,45 @@ Volume-Based Indicators:
         }
 
     return market_analyst_node
+
+
+def _build_market_audit_appendix(*, ticker: str, current_date: str) -> str:
+    """Build a compact appendix with the market data injected through tools."""
+    start_date = _days_back(current_date, 30)
+    stock_block = _safe_tool_call(
+        lambda: get_stock_data.func(ticker, start_date, current_date),
+        f"OHLCV data unavailable for {ticker} from {start_date} to {current_date}.",
+    )
+    indicator_block = _safe_tool_call(
+        lambda: get_indicators.func(
+            ticker,
+            ",".join(DEFAULT_MARKET_AUDIT_INDICATORS),
+            current_date,
+            30,
+        ),
+        f"Technical indicators unavailable for {ticker} as of {current_date}.",
+    )
+
+    return (
+        "## Market 原始行情与指标表\n\n"
+        "以下为本轮 Market Analyst 使用的结构化行情与技术指标审计信息。"
+        "行情源和指标源遵循当前配置的 data vendor，通常优先使用 yfinance，并在可用时按配置回退。\n\n"
+        f"- Ticker: `{ticker}`\n"
+        f"- Window: `{start_date}` to `{current_date}`\n"
+        f"- Indicator set: `{', '.join(DEFAULT_MARKET_AUDIT_INDICATORS)}`\n\n"
+        "### OHLCV\n\n"
+        f"{stock_block}\n\n"
+        "### Technical Indicators\n\n"
+        f"{indicator_block}"
+    )
+
+
+def _safe_tool_call(fetcher, fallback: str) -> str:
+    try:
+        return fetcher()
+    except Exception as exc:
+        return f"{fallback}\n\nError: {exc}"
+
+
+def _days_back(current_date: str, days: int) -> str:
+    return (datetime.strptime(current_date, "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")

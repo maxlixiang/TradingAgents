@@ -89,9 +89,10 @@ RSSHUB_BASE_URL=https://your-rsshub.example.com
 RSSHub 新闻模块会做：
 
 - 最近 7 天时间窗口过滤。
-- 按 ticker、公司名、行业关键词、中文别名、宏观关键词打分。
-- 对未手写配置的 ticker，会尝试从 yfinance 公司资料自动扩展公司名、行业、板块关键词。
-- 对部分行业会自动补充中文语义词，例如 semiconductor 会补充“芯片、半导体”，memory/storage 会补充“存储、内存、闪存、存储芯片、SSD”等。
+- 通过 `tradingagents/dataflows/news_keywords.py` 中的 `build_news_keywords(ticker)` 生成分层关键词，包括 ticker、公司名/中文别名、产品词、行业词、peer/供应链词。
+- 对未手写配置的 ticker，会尝试从 yfinance 公司资料自动扩展 `shortName`、`longName`、`displayName`、`industry`、`sector`。
+- 对部分行业会自动补充中文语义词，例如 semiconductor 会补充“芯片、半导体”，memory/storage 会补充“存储、内存、闪存、存储芯片、SSD”，energy/oil 会补充“能源、原油、天然气、炼化”，cloud/database 会补充“云计算、数据库、企业软件”等。
+- 打分时 ticker/公司名/中文别名权重最高，产品词次之，行业词和 peer/供应链词作为补充，宏观关键词继续保持固定词表。
 - 去重。
 - 保留标题、来源、发布时间、链接、摘要。
 - 按类别输出给 News Analyst，包括市场宏观、中文财经、AI/科技、央行利率、股票快讯、地缘政治等。
@@ -357,7 +358,7 @@ get_rsshub_news
 - 中东、俄乌、美国政策、中国政策、出口管制等地缘风险。
 - 中文财经媒体视角。
 
-对未在手写关键词表中的 ticker，RSSHub 模块会尝试从公司资料自动生成关键词；对 SNDK 这类存储公司，会覆盖 `Sandisk`、`闪迪`、`NAND`、`flash storage`、`memory`、`存储`、`闪存`、`固态硬盘` 等中英文关键词。
+RSSHub 模块现在会先调用 `build_news_keywords(ticker)` 生成可审计的分层关键词，再用于新闻筛选、打分和输出中的 `Keyword hints`。关键词来源包括 ticker 本身、yfinance 公司资料、手写中文别名、行业/产品映射，以及可选 peer/供应链映射；宏观关键词仍保留为固定词表。对 SNDK 这类存储公司，会覆盖 `SanDisk`、`闪迪`、`NAND`、`flash storage`、`memory`、`存储`、`闪存`、`固态硬盘` 等中英文关键词。
 
 ### Fundamentals Analyst
 

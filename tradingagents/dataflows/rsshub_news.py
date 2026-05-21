@@ -188,6 +188,27 @@ def _score_item(text: str, keyword_set: NewsKeywordSet) -> tuple[int, list[str]]
     return score, matches[:12]
 
 
+def _format_keyword_audit(keyword_set: NewsKeywordSet) -> list[str]:
+    return [
+        "Keyword filter audit: the RSSHub/newsnow items below were filtered and ranked using these keyword groups. Review them for missing, noisy, or stale terms.",
+        f"- Ticker terms (+6): {_format_terms(keyword_set.ticker_terms)}",
+        f"- Company/name terms (+6): {_format_terms(keyword_set.company_terms)}",
+        f"- Product terms (+4): {_format_terms(keyword_set.product_terms)}",
+        f"- Industry terms (+2): {_format_terms(keyword_set.industry_terms)}",
+        f"- Peer/supply-chain terms (+2): {_format_terms(keyword_set.peer_terms)}",
+        f"- Macro/context terms (+1): {_format_terms(MACRO_KEYWORDS)}",
+        "Note: broad macro/geopolitical feeds may receive an additional context score, so some items can appear with only macro/context matches.",
+    ]
+
+
+def _format_terms(terms: tuple[str, ...], limit: int = 40) -> str:
+    visible_terms = terms[:limit]
+    rendered = ", ".join(visible_terms) if visible_terms else "(none)"
+    if len(terms) > limit:
+        rendered += f", ... (+{len(terms) - limit} more)"
+    return rendered
+
+
 def get_rsshub_news(ticker: str, curr_date: str, look_back_days: int = 7, limit: int = 30) -> str:
     """Fetch and rank curated RSSHub/newsnow items for the News Analyst."""
     try:
@@ -245,7 +266,7 @@ def get_rsshub_news(ticker: str, curr_date: str, look_back_days: int = 7, limit:
         f"Window: {start_dt.strftime('%Y-%m-%d')} to {current_dt.strftime('%Y-%m-%d')}",
         f"Base URL: {_base_url()}",
         f"Fetched feeds: {len(RSSHUB_FEEDS)}; selected items: {len(selected)}",
-        "Keyword hints: " + ", ".join(keyword_set.all_terms[:24]),
+        *_format_keyword_audit(keyword_set),
     ]
     if not selected:
         if errors:

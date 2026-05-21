@@ -92,6 +92,7 @@ RSSHub 新闻模块会做：
 - 通过 `tradingagents/dataflows/news_keywords.py` 中的 `build_news_keywords(ticker)` 生成分层关键词，包括 ticker、公司名/中文别名、产品词、行业词、peer/供应链词。
 - 人工维护关键词放在 `tradingagents/dataflows/news_keywords.json`，程序逻辑和关键词数据分离，便于扩展。
 - 对人工库和运行时缓存都没有覆盖的 ticker，会尝试从 yfinance 公司资料自动扩展 `shortName`、`longName`、`displayName`、`industry`、`sector`，并写入 `data_cache_dir/news_keywords_cache.json`。
+- `news_keywords.json` 不会随用户查询自动变化；自动生成结果只写入运行时缓存，用户确认质量后再手动补进人工库。
 - 对部分行业会自动补充中文语义词，例如 semiconductor 会补充“芯片、半导体”，memory/storage 会补充“存储、内存、闪存、存储芯片、SSD”，energy/oil 会补充“能源、原油、天然气、炼化”，cloud/database 会补充“云计算、数据库、企业软件”等。
 - 打分时 ticker/公司名/中文别名权重最高，产品词次之，行业词和 peer/供应链词作为补充，宏观关键词继续保持固定词表。
 - 去重。
@@ -360,6 +361,8 @@ get_rsshub_news
 - 中文财经媒体视角。
 
 RSSHub 模块现在会先调用 `build_news_keywords(ticker)` 生成可审计的分层关键词，再用于新闻筛选、打分和输出中的 `Keyword hints`。关键词来源包括 ticker 本身、`news_keywords.json` 人工关键词库、运行时缓存、yfinance 公司资料、行业/产品映射，以及可选 peer/供应链映射；宏观关键词仍保留为固定词表。对 SNDK 这类存储公司，会覆盖 `SanDisk`、`闪迪`、`NAND`、`flash storage`、`memory`、`存储`、`闪存`、`固态硬盘` 等中英文关键词。
+
+RSSHub 输出块开头会打印按权重分组的关键词审计清单，说明后续新闻是如何被关键词过滤和排序出来的，方便人工检查关键词是否遗漏、过宽或过时。
 
 ### Fundamentals Analyst
 

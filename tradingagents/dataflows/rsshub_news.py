@@ -10,7 +10,6 @@ from __future__ import annotations
 import html
 import os
 import re
-from functools import lru_cache
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -19,6 +18,8 @@ from urllib.parse import urljoin
 from xml.etree import ElementTree
 
 import requests
+
+from tradingagents.dataflows.news_keywords import NewsKeywordSet, build_news_keywords
 
 
 DEFAULT_RSSHUB_BASE_URL = "https://rss.cnnewsnow.com"
@@ -53,39 +54,6 @@ RSSHUB_FEEDS: tuple[RssFeed, ...] = (
 )
 
 
-COMPANY_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "NVDA": (
-        "nvda", "nvidia", "英伟达", "gpu", "cuda", "blackwell", "rubin",
-        "gb200", "h100", "h200", "ai chip", "ai accelerator", "算力",
-        "芯片", "半导体", "数据中心",
-    ),
-    "AAPL": ("aapl", "apple", "苹果", "iphone", "app store", "services", "ios"),
-    "MSFT": ("msft", "microsoft", "微软", "azure", "copilot", "windows"),
-    "GOOG": ("goog", "googl", "alphabet", "google", "谷歌", "gemini", "search"),
-    "GOOGL": ("goog", "googl", "alphabet", "google", "谷歌", "gemini", "search"),
-    "AMZN": ("amzn", "amazon", "亚马逊", "aws", "prime", "e-commerce"),
-    "META": ("meta", "facebook", "instagram", "whatsapp", "metaverse", "threads"),
-    "TSLA": ("tsla", "tesla", "特斯拉", "ev", "electric vehicle", "robotaxi"),
-    "AMD": ("amd", "advanced micro devices", "mi300", "mi350", "gpu", "cpu"),
-    "INTC": ("intc", "intel", "英特尔", "foundry", "cpu", "semiconductor"),
-    "AVGO": ("avgo", "broadcom", "博通", "vmware", "semiconductor"),
-    "SNDK": (
-        "sndk", "sandisk", "san disk", "闪迪", "nand", "flash", "flash storage",
-        "memory", "storage", "ssd", "固态硬盘", "闪存", "存储", "内存",
-        "存储芯片", "存储器", "半导体",
-    ),
-}
-
-
-INDUSTRY_KEYWORD_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("semiconductor", ("芯片", "半导体", "晶圆", "先进封装")),
-    ("memory", ("存储", "内存", "闪存", "存储芯片", "存储器", "nand", "dram")),
-    ("storage", ("存储", "闪存", "固态硬盘", "ssd", "数据中心存储")),
-    ("hardware", ("硬件", "设备", "供应链")),
-    ("software", ("软件", "云服务", "订阅")),
-    ("automotive", ("汽车", "电动车", "自动驾驶")),
-    ("bank", ("银行", "利率", "信贷")),
-)
 
 
 MACRO_KEYWORDS: tuple[str, ...] = (
@@ -184,79 +152,40 @@ def _parse_feed(xml_text: str, source_url: str) -> list[dict[str, str]]:
 
 
 def _keywords_for_ticker(ticker: str) -> tuple[str, ...]:
-    ticker_upper = ticker.upper()
-    return tuple(dict.fromkeys((
-        ticker_upper.lower(),
-        f"${ticker_upper.lower()}",
-        *COMPANY_KEYWORDS.get(ticker_upper, ()),
-        *_profile_keywords_for_ticker(ticker_upper),
-    )))
+    return build_news_keywords(ticker).all_terms
 
 
-@lru_cache(maxsize=256)
-def _profile_keywords_for_ticker(ticker_upper: str) -> tuple[str, ...]:
-    """Best-effort dynamic company keywords for tickers not in the registry."""
-    keywords: list[str] = []
-
-    try:
-        import yfinance as yf
-
-        info = yf.Ticker(ticker_upper).info or {}
-    except Exception:
-        info = {}
-
-    for key in ("shortName", "longName", "displayName", "industry", "sector"):
-        value = info.get(key)
-        if isinstance(value, str):
-            keywords.extend(_name_keyword_variants(value))
-            keywords.extend(_industry_aliases(value))
-
-    return tuple(dict.fromkeys(k.lower() for k in keywords if k))
 
 
-def _industry_aliases(value: str) -> list[str]:
-    lowered = value.lower()
-    aliases: list[str] = []
-    for needle, terms in INDUSTRY_KEYWORD_ALIASES:
-        if needle in lowered:
-            aliases.extend(terms)
-    return aliases
-
-
-def _name_keyword_variants(value: str) -> list[str]:
-    cleaned = re.sub(r"\s+", " ", value).strip()
-    if not cleaned:
-        return []
-
-    variants = [cleaned]
-    suffix_pattern = re.compile(
-        r"\b(incorporated|inc\.?|corp\.?|corporation|company|co\.?|ltd\.?|limited|plc|class\s+[a-z])\b",
-        flags=re.IGNORECASE,
-    )
-    base = suffix_pattern.sub(" ", cleaned)
-    base = re.sub(r"[,.\s]+", " ", base).strip()
-    if base and base.lower() != cleaned.lower():
-        variants.append(base)
-
-    tokens = [token for token in re.split(r"[^A-Za-z0-9]+", base) if len(token) >= 3]
-    variants.extend(tokens[:4])
-
-    return variants[:8]
-
-
-def _score_item(text: str, company_keywords: tuple[str, ...]) -> tuple[int, list[str]]:
+def _score_item(text: str, keyword_set: NewsKeywordSet) -> tuple[int, list[str]]:
     lowered = text.lower()
-    matches = []
+    matches: list[str] = []
+    matched_terms: set[str] = set()
     score = 0
-    for keyword in company_keywords:
-        if keyword and keyword.lower() in lowered:
+
+    weighted_groups = (
+        (keyword_set.ticker_terms, 6),
+        (keyword_set.company_terms, 6),
+        (keyword_set.product_terms, 4),
+        (keyword_set.industry_terms, 2),
+        (keyword_set.peer_terms, 2),
+    )
+    for keywords, weight in weighted_groups:
+        for keyword in keywords:
+            key = keyword.lower()
+            if not key or key in matched_terms or key not in lowered:
+                continue
+            matched_terms.add(key)
             matches.append(keyword)
-            score += 4
+            score += weight
+
     for keyword in MACRO_KEYWORDS:
-        if keyword.lower() in lowered:
+        key = keyword.lower()
+        if key and key not in matched_terms and key in lowered:
+            matched_terms.add(key)
             matches.append(keyword)
             score += 1
-    return score, matches[:8]
+    return score, matches[:12]
 
 
 def get_rsshub_news(ticker: str, curr_date: str, look_back_days: int = 7, limit: int = 30) -> str:
@@ -266,7 +195,7 @@ def get_rsshub_news(ticker: str, curr_date: str, look_back_days: int = 7, limit:
     except ValueError:
         current_dt = datetime.now(timezone.utc)
     start_dt = current_dt - timedelta(days=look_back_days)
-    company_keywords = _keywords_for_ticker(ticker)
+    keyword_set = build_news_keywords(ticker)
 
     fetched: list[dict[str, object]] = []
     errors: list[str] = []
@@ -291,7 +220,7 @@ def get_rsshub_news(ticker: str, curr_date: str, look_back_days: int = 7, limit:
                 continue
             title = str(entry.get("title") or "")
             summary = str(entry.get("summary") or "")
-            score, matches = _score_item(f"{title} {summary}", company_keywords)
+            score, matches = _score_item(f"{title} {summary}", keyword_set)
             if feed.category in {"Markets and macro", "Rates and central banks", "Fast market alerts", "Geopolitics", "Geopolitics and policy"}:
                 score += 1
             if score <= 0:
@@ -316,7 +245,7 @@ def get_rsshub_news(ticker: str, curr_date: str, look_back_days: int = 7, limit:
         f"Window: {start_dt.strftime('%Y-%m-%d')} to {current_dt.strftime('%Y-%m-%d')}",
         f"Base URL: {_base_url()}",
         f"Fetched feeds: {len(RSSHUB_FEEDS)}; selected items: {len(selected)}",
-        "Keyword hints: " + ", ".join(company_keywords[:12]),
+        "Keyword hints: " + ", ".join(keyword_set.all_terms[:24]),
     ]
     if not selected:
         if errors:

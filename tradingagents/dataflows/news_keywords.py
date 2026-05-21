@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from tradingagents.default_config import DEFAULT_CONFIG
+
+
+KEYWORD_DATABASE_PATH = Path(__file__).with_name("news_keywords.json")
+CACHE_FILENAME = "news_keywords_cache.json"
+KEYWORD_FIELDS = ("company_terms", "product_terms", "industry_terms", "peer_terms")
+PROFILE_KEYS = ("shortName", "longName", "displayName", "industry", "sector")
 
 
 @dataclass(frozen=True)
@@ -15,116 +26,6 @@ class NewsKeywordSet:
     industry_terms: tuple[str, ...]
     peer_terms: tuple[str, ...]
     all_terms: tuple[str, ...]
-
-
-CHINESE_COMPANY_ALIASES: dict[str, tuple[str, ...]] = {
-    "AAPL": ("苹果",),
-    "AMD": ("超威半导体", "超微半导体"),
-    "AMZN": ("亚马逊",),
-    "AVGO": ("博通",),
-    "GOOG": ("谷歌",),
-    "GOOGL": ("谷歌",),
-    "INTC": ("英特尔",),
-    "CAT": ("卡特彼勒",),
-    "META": ("Meta", "Facebook"),
-    "MSFT": ("微软",),
-    "NFLX": ("奈飞", "网飞"),
-    "NVDA": ("英伟达", "辉达"),
-    "ORCL": ("甲骨文",),
-    "SNDK": ("闪迪", "SanDisk"),
-    "TSLA": ("特斯拉",),
-    "XOM": ("埃克森美孚",),
-}
-
-
-STATIC_COMPANY_TERMS: dict[str, tuple[str, ...]] = {
-    "AMD": ("Advanced Micro Devices",),
-    "GOOG": ("Alphabet", "Google"),
-    "GOOGL": ("Alphabet", "Google"),
-    "CAT": ("Caterpillar", "Caterpillar Inc"),
-    "META": ("Meta Platforms", "Facebook", "Instagram", "WhatsApp"),
-    "NFLX": ("Netflix", "Netflix Inc"),
-    "NVDA": ("NVIDIA", "Nvidia Corporation"),
-    "ORCL": ("Oracle", "Oracle Corporation"),
-    "SNDK": ("SanDisk", "Sandisk Corporation", "San Disk"),
-    "TSLA": ("Tesla", "Tesla Inc"),
-    "XOM": ("Exxon Mobil", "ExxonMobil", "Exxon Mobil Corporation"),
-}
-
-
-TICKER_PRODUCT_TERMS: dict[str, tuple[str, ...]] = {
-    "AAPL": ("iPhone", "App Store", "iOS", "Mac", "services"),
-    "AMD": ("GPU", "CPU", "MI300", "MI350", "Instinct", "EPYC", "Ryzen"),
-    "AMZN": ("AWS", "Prime", "e-commerce", "cloud computing"),
-    "AVGO": ("VMware", "ASIC", "networking chip", "AI accelerator"),
-    "GOOG": ("Gemini", "Search", "YouTube", "Google Cloud"),
-    "GOOGL": ("Gemini", "Search", "YouTube", "Google Cloud"),
-    "INTC": ("foundry", "CPU", "data center", "Gaudi"),
-    "CAT": ("excavator", "bulldozer", "construction equipment", "mining equipment", "engine", "发电机", "挖掘机", "推土机"),
-    "META": ("Facebook", "Instagram", "WhatsApp", "Threads", "metaverse", "AI"),
-    "MSFT": ("Azure", "Copilot", "Windows", "Office", "cloud"),
-    "NFLX": ("streaming", "subscription", "advertising tier", "content", "series", "film", "流媒体", "订阅", "广告套餐", "剧集", "影视内容"),
-    "NVDA": (
-        "GPU",
-        "CUDA",
-        "Blackwell",
-        "Rubin",
-        "GB200",
-        "H100",
-        "H200",
-        "AI chip",
-        "AI accelerator",
-        "算力",
-        "数据中心",
-    ),
-    "ORCL": ("Oracle Cloud", "OCI", "database", "ERP", "NetSuite", "Fusion Cloud", "AI infrastructure", "数据库", "云服务", "企业软件"),
-    "SNDK": (
-        "NAND",
-        "DRAM",
-        "flash",
-        "flash storage",
-        "memory",
-        "storage",
-        "SSD",
-        "solid state drive",
-        "闪存",
-        "存储",
-        "内存",
-        "固态硬盘",
-        "存储芯片",
-        "存储器",
-    ),
-    "TSLA": ("EV", "electric vehicle", "robotaxi", "FSD", "Model Y", "Megapack"),
-    "XOM": ("oil", "natural gas", "LNG", "upstream", "downstream", "refining", "Permian", "Guyana", "原油", "天然气", "液化天然气", "炼油"),
-}
-
-
-TICKER_INDUSTRY_TERMS: dict[str, tuple[str, ...]] = {
-    "AMD": ("semiconductor", "chip", "半导体", "芯片", "AI芯片"),
-    "AVGO": ("semiconductor", "chip", "半导体", "芯片", "ASIC"),
-    "CAT": ("industrial", "machinery", "construction", "mining", "infrastructure", "工业", "机械", "工程机械", "矿山", "基建"),
-    "INTC": ("semiconductor", "foundry", "半导体", "芯片", "晶圆代工"),
-    "NFLX": ("media", "entertainment", "streaming", "subscription", "媒体", "娱乐", "流媒体", "订阅"),
-    "NVDA": ("semiconductor", "chip", "半导体", "芯片", "晶圆", "先进封装", "GPU", "AI芯片"),
-    "ORCL": ("software", "cloud", "database", "enterprise software", "软件", "云计算", "数据库", "企业软件"),
-    "SNDK": ("memory", "storage", "semiconductor", "半导体", "芯片", "NAND", "DRAM", "闪存", "存储"),
-    "TSLA": ("automotive", "automobile", "汽车", "电动车", "自动驾驶"),
-    "XOM": ("energy", "oil and gas", "integrated oil", "refining", "能源", "石油天然气", "油气", "炼化"),
-}
-
-
-TICKER_PEER_TERMS: dict[str, tuple[str, ...]] = {
-    "AMD": ("NVIDIA", "Intel", "TSMC", "台积电", "GPU", "AI accelerator"),
-    "AVGO": ("NVIDIA", "Marvell", "TSMC", "台积电", "ASIC"),
-    "INTC": ("AMD", "NVIDIA", "TSMC", "台积电", "foundry"),
-    "NVDA": ("AMD", "Broadcom", "AVGO", "TSMC", "台积电", "HBM", "SK Hynix", "Micron"),
-    "CAT": ("Deere", "Komatsu", "Cummins", "Volvo", "小松", "迪尔", "矿山资本开支", "基建投资"),
-    "NFLX": ("Disney", "DIS", "Warner Bros Discovery", "WBD", "Amazon Prime Video", "YouTube", "HBO Max", "迪士尼"),
-    "ORCL": ("Microsoft", "Azure", "Amazon Web Services", "AWS", "Google Cloud", "SAP", "Salesforce", "Snowflake"),
-    "SNDK": ("Micron", "Samsung", "Kioxia", "SK Hynix", "NAND", "DRAM", "铠侠", "美光", "三星"),
-    "TSLA": ("BYD", "比亚迪", "Rivian", "Lucid", "Panasonic", "宁德时代", "CATL", "lithium", "锂电池"),
-    "XOM": ("Chevron", "CVX", "Shell", "BP", "ConocoPhillips", "OPEC", "WTI", "Brent", "雪佛龙", "欧佩克"),
-}
 
 
 INDUSTRY_KEYWORD_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -154,26 +55,22 @@ def build_news_keywords(ticker: str) -> NewsKeywordSet:
     """Build layered English/Chinese keyword hints for a ticker."""
     ticker_upper = (ticker or "").strip().upper()
     ticker_lower = ticker_upper.lower()
-
     ticker_terms = tuple(
         term for term in (ticker_upper, f"${ticker_upper}", ticker_lower, f"${ticker_lower}") if term
     )
-    profile = _profile_for_ticker(ticker_upper)
 
-    company_terms = _unique_terms((
-        *STATIC_COMPANY_TERMS.get(ticker_upper, ()),
-        *CHINESE_COMPANY_ALIASES.get(ticker_upper, ()),
-        *_profile_name_terms(profile),
-    ))
-    industry_terms = _unique_terms((
-        *TICKER_INDUSTRY_TERMS.get(ticker_upper, ()),
-        *_profile_industry_terms(profile),
-    ))
+    curated = _curated_keywords_for_ticker(ticker_upper)
+    dynamic = _dynamic_keywords_for_ticker(ticker_upper, allow_generate=not curated.all_terms)
+
+    company_terms = _unique_terms((*curated.company_terms, *dynamic.company_terms))
+    industry_terms = _unique_terms((*curated.industry_terms, *dynamic.industry_terms))
     product_terms = _unique_terms((
-        *TICKER_PRODUCT_TERMS.get(ticker_upper, ()),
+        *curated.product_terms,
+        *dynamic.product_terms,
         *_product_terms_from_industry(industry_terms),
     ))
-    peer_terms = _unique_terms(TICKER_PEER_TERMS.get(ticker_upper, ()))
+    peer_terms = _unique_terms((*curated.peer_terms, *dynamic.peer_terms))
+
     non_ticker_terms = _unique_terms((*company_terms, *product_terms, *industry_terms, *peer_terms))
     all_terms = tuple(dict.fromkeys((*ticker_terms, *non_ticker_terms)))
 
@@ -187,7 +84,87 @@ def build_news_keywords(ticker: str) -> NewsKeywordSet:
     )
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=512)
+def _curated_keywords_for_ticker(ticker_upper: str) -> NewsKeywordSet:
+    return _keyword_set_from_mapping(_load_curated_keyword_database().get(ticker_upper, {}))
+
+
+@lru_cache(maxsize=512)
+def _dynamic_keywords_for_ticker(ticker_upper: str, allow_generate: bool) -> NewsKeywordSet:
+    cached = _load_keyword_cache().get(ticker_upper)
+    if cached:
+        return _keyword_set_from_mapping(cached)
+    if not allow_generate:
+        return _empty_keyword_set()
+
+    generated = _generate_dynamic_keywords_for_ticker(ticker_upper)
+    if generated.all_terms:
+        _write_keyword_cache_entry(ticker_upper, generated)
+    return generated
+
+
+@lru_cache(maxsize=1)
+def _load_curated_keyword_database() -> dict[str, dict[str, tuple[str, ...]]]:
+    raw = _read_json_object(KEYWORD_DATABASE_PATH)
+    database: dict[str, dict[str, tuple[str, ...]]] = {}
+    for ticker, payload in raw.items():
+        if isinstance(ticker, str) and isinstance(payload, dict):
+            database[ticker.upper()] = _normalize_keyword_payload(payload)
+    return database
+
+
+def _load_keyword_cache() -> dict[str, dict[str, tuple[str, ...]]]:
+    raw = _read_json_object(_keyword_cache_path())
+    cache: dict[str, dict[str, tuple[str, ...]]] = {}
+    for ticker, payload in raw.items():
+        if isinstance(ticker, str) and isinstance(payload, dict):
+            cache[ticker.upper()] = _normalize_keyword_payload(payload)
+    return cache
+
+
+def _write_keyword_cache_entry(ticker_upper: str, keyword_set: NewsKeywordSet) -> None:
+    cache_path = _keyword_cache_path()
+    payload = _load_keyword_cache()
+    payload[ticker_upper] = {
+        "company_terms": keyword_set.company_terms,
+        "product_terms": keyword_set.product_terms,
+        "industry_terms": keyword_set.industry_terms,
+        "peer_terms": keyword_set.peer_terms,
+    }
+
+    serializable = {
+        ticker: {field: list(values) for field, values in fields.items()}
+        for ticker, fields in sorted(payload.items())
+    }
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(
+            json.dumps(serializable, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def _generate_dynamic_keywords_for_ticker(ticker_upper: str) -> NewsKeywordSet:
+    profile = _profile_for_ticker(ticker_upper)
+    if not profile:
+        return _empty_keyword_set()
+
+    company_terms = _profile_name_terms(profile)
+    industry_terms = _profile_industry_terms(profile)
+    product_terms = _product_terms_from_industry(industry_terms)
+
+    return NewsKeywordSet(
+        ticker_terms=(),
+        company_terms=company_terms,
+        product_terms=product_terms,
+        industry_terms=industry_terms,
+        peer_terms=(),
+        all_terms=_unique_terms((*company_terms, *product_terms, *industry_terms)),
+    )
+
+
 def _profile_for_ticker(ticker_upper: str) -> dict[str, str]:
     """Best-effort yfinance profile lookup; failures simply return no dynamic terms."""
     try:
@@ -198,7 +175,7 @@ def _profile_for_ticker(ticker_upper: str) -> dict[str, str]:
         return {}
 
     profile: dict[str, str] = {}
-    for key in ("shortName", "longName", "displayName", "industry", "sector"):
+    for key in PROFILE_KEYS:
         value = info.get(key)
         if isinstance(value, str) and value.strip():
             profile[key] = value.strip()
@@ -211,7 +188,7 @@ def _profile_name_terms(profile: dict[str, str]) -> tuple[str, ...]:
         value = profile.get(key)
         if value:
             terms.extend(_name_keyword_variants(value))
-    return tuple(terms)
+    return _unique_terms(terms)
 
 
 def _profile_industry_terms(profile: dict[str, str]) -> tuple[str, ...]:
@@ -221,7 +198,7 @@ def _profile_industry_terms(profile: dict[str, str]) -> tuple[str, ...]:
         if value:
             terms.append(value)
             terms.extend(_industry_aliases(value))
-    return tuple(terms)
+    return _unique_terms(terms)
 
 
 def _product_terms_from_industry(industry_terms: tuple[str, ...]) -> tuple[str, ...]:
@@ -231,7 +208,7 @@ def _product_terms_from_industry(industry_terms: tuple[str, ...]) -> tuple[str, 
         terms.extend(("NAND", "DRAM", "flash", "SSD", "固态硬盘", "存储芯片"))
     elif "semiconductor" in joined or "chip" in joined or "半导体" in joined or "芯片" in joined:
         terms.extend(("GPU", "AI chip", "AI accelerator", "晶圆", "先进封装"))
-    return tuple(terms)
+    return _unique_terms(terms)
 
 
 def _industry_aliases(value: str) -> list[str]:
@@ -261,6 +238,59 @@ def _name_keyword_variants(value: str) -> list[str]:
     tokens = [token for token in re.split(r"[^A-Za-z0-9]+", base) if len(token) >= 3]
     variants.extend(tokens[:4])
     return variants[:8]
+
+
+def _keyword_set_from_mapping(payload: dict[str, Any]) -> NewsKeywordSet:
+    company_terms = tuple(payload.get("company_terms", ()))
+    product_terms = tuple(payload.get("product_terms", ()))
+    industry_terms = tuple(payload.get("industry_terms", ()))
+    peer_terms = tuple(payload.get("peer_terms", ()))
+    return NewsKeywordSet(
+        ticker_terms=(),
+        company_terms=company_terms,
+        product_terms=product_terms,
+        industry_terms=industry_terms,
+        peer_terms=peer_terms,
+        all_terms=_unique_terms((*company_terms, *product_terms, *industry_terms, *peer_terms)),
+    )
+
+
+def _normalize_keyword_payload(payload: dict[str, Any]) -> dict[str, tuple[str, ...]]:
+    return {field: _unique_terms(_coerce_terms(payload.get(field))) for field in KEYWORD_FIELDS}
+
+
+def _coerce_terms(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, list):
+        return tuple(str(item) for item in value if isinstance(item, str))
+    if isinstance(value, tuple):
+        return tuple(str(item) for item in value if isinstance(item, str))
+    return ()
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _keyword_cache_path() -> Path:
+    cache_dir = Path(str(DEFAULT_CONFIG.get("data_cache_dir") or Path.home() / ".tradingagents" / "cache"))
+    return cache_dir / CACHE_FILENAME
+
+
+def _empty_keyword_set() -> NewsKeywordSet:
+    return NewsKeywordSet(
+        ticker_terms=(),
+        company_terms=(),
+        product_terms=(),
+        industry_terms=(),
+        peer_terms=(),
+        all_terms=(),
+    )
 
 
 def _unique_terms(values: tuple[str, ...] | list[str]) -> tuple[str, ...]:

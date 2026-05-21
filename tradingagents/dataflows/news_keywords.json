@@ -1,0 +1,466 @@
+{
+  "AAPL": {
+    "company_terms": [
+      "Apple",
+      "Apple Inc",
+      "苹果"
+    ],
+    "product_terms": [
+      "iPhone",
+      "App Store",
+      "iOS",
+      "Mac",
+      "services"
+    ],
+    "industry_terms": [],
+    "peer_terms": []
+  },
+  "AMD": {
+    "company_terms": [
+      "Advanced Micro Devices",
+      "超威半导体",
+      "超微半导体"
+    ],
+    "product_terms": [
+      "GPU",
+      "CPU",
+      "MI300",
+      "MI350",
+      "Instinct",
+      "EPYC",
+      "Ryzen"
+    ],
+    "industry_terms": [
+      "semiconductor",
+      "chip",
+      "半导体",
+      "芯片",
+      "AI芯片"
+    ],
+    "peer_terms": [
+      "NVIDIA",
+      "Intel",
+      "TSMC",
+      "台积电",
+      "GPU",
+      "AI accelerator"
+    ]
+  },
+  "AMZN": {
+    "company_terms": [
+      "Amazon",
+      "Amazon.com",
+      "亚马逊"
+    ],
+    "product_terms": [
+      "AWS",
+      "Prime",
+      "e-commerce",
+      "cloud computing"
+    ],
+    "industry_terms": [],
+    "peer_terms": []
+  },
+  "AVGO": {
+    "company_terms": [
+      "Broadcom",
+      "Broadcom Inc",
+      "博通"
+    ],
+    "product_terms": [
+      "VMware",
+      "ASIC",
+      "networking chip",
+      "AI accelerator"
+    ],
+    "industry_terms": [
+      "semiconductor",
+      "chip",
+      "半导体",
+      "芯片",
+      "ASIC"
+    ],
+    "peer_terms": [
+      "NVIDIA",
+      "Marvell",
+      "TSMC",
+      "台积电",
+      "ASIC"
+    ]
+  },
+  "CAT": {
+    "company_terms": [
+      "Caterpillar",
+      "Caterpillar Inc",
+      "卡特彼勒"
+    ],
+    "product_terms": [
+      "excavator",
+      "bulldozer",
+      "construction equipment",
+      "mining equipment",
+      "engine",
+      "发电机",
+      "挖掘机",
+      "推土机"
+    ],
+    "industry_terms": [
+      "industrial",
+      "machinery",
+      "construction",
+      "mining",
+      "infrastructure",
+      "工业",
+      "机械",
+      "工程机械",
+      "矿山",
+      "基建"
+    ],
+    "peer_terms": [
+      "Deere",
+      "Komatsu",
+      "Cummins",
+      "Volvo",
+      "小松",
+      "迪尔",
+      "矿山资本开支",
+      "基建投资"
+    ]
+  },
+  "GOOG": {
+    "company_terms": [
+      "Alphabet",
+      "Google",
+      "谷歌"
+    ],
+    "product_terms": [
+      "Gemini",
+      "Search",
+      "YouTube",
+      "Google Cloud"
+    ],
+    "industry_terms": [],
+    "peer_terms": []
+  },
+  "GOOGL": {
+    "company_terms": [
+      "Alphabet",
+      "Google",
+      "谷歌"
+    ],
+    "product_terms": [
+      "Gemini",
+      "Search",
+      "YouTube",
+      "Google Cloud"
+    ],
+    "industry_terms": [],
+    "peer_terms": []
+  },
+  "INTC": {
+    "company_terms": [
+      "Intel",
+      "Intel Corporation",
+      "英特尔"
+    ],
+    "product_terms": [
+      "foundry",
+      "CPU",
+      "data center",
+      "Gaudi"
+    ],
+    "industry_terms": [
+      "semiconductor",
+      "foundry",
+      "半导体",
+      "芯片",
+      "晶圆代工"
+    ],
+    "peer_terms": [
+      "AMD",
+      "NVIDIA",
+      "TSMC",
+      "台积电",
+      "foundry"
+    ]
+  },
+  "META": {
+    "company_terms": [
+      "Meta",
+      "Meta Platforms",
+      "Facebook",
+      "Instagram",
+      "WhatsApp"
+    ],
+    "product_terms": [
+      "Facebook",
+      "Instagram",
+      "WhatsApp",
+      "Threads",
+      "metaverse",
+      "AI"
+    ],
+    "industry_terms": [],
+    "peer_terms": []
+  },
+  "MSFT": {
+    "company_terms": [
+      "Microsoft",
+      "Microsoft Corporation",
+      "微软"
+    ],
+    "product_terms": [
+      "Azure",
+      "Copilot",
+      "Windows",
+      "Office",
+      "cloud"
+    ],
+    "industry_terms": [],
+    "peer_terms": []
+  },
+  "NFLX": {
+    "company_terms": [
+      "Netflix",
+      "Netflix Inc",
+      "奈飞",
+      "网飞"
+    ],
+    "product_terms": [
+      "streaming",
+      "subscription",
+      "advertising tier",
+      "content",
+      "series",
+      "film",
+      "流媒体",
+      "订阅",
+      "广告套餐",
+      "剧集",
+      "影视内容"
+    ],
+    "industry_terms": [
+      "media",
+      "entertainment",
+      "streaming",
+      "subscription",
+      "媒体",
+      "娱乐",
+      "流媒体",
+      "订阅"
+    ],
+    "peer_terms": [
+      "Disney",
+      "DIS",
+      "Warner Bros Discovery",
+      "WBD",
+      "Amazon Prime Video",
+      "YouTube",
+      "HBO Max",
+      "迪士尼"
+    ]
+  },
+  "NVDA": {
+    "company_terms": [
+      "NVIDIA",
+      "Nvidia Corporation",
+      "英伟达",
+      "辉达"
+    ],
+    "product_terms": [
+      "GPU",
+      "CUDA",
+      "Blackwell",
+      "Rubin",
+      "GB200",
+      "H100",
+      "H200",
+      "AI chip",
+      "AI accelerator",
+      "算力",
+      "数据中心"
+    ],
+    "industry_terms": [
+      "semiconductor",
+      "chip",
+      "半导体",
+      "芯片",
+      "晶圆",
+      "先进封装",
+      "GPU",
+      "AI芯片"
+    ],
+    "peer_terms": [
+      "AMD",
+      "Broadcom",
+      "AVGO",
+      "TSMC",
+      "台积电",
+      "HBM",
+      "SK Hynix",
+      "Micron"
+    ]
+  },
+  "ORCL": {
+    "company_terms": [
+      "Oracle",
+      "Oracle Corporation",
+      "甲骨文"
+    ],
+    "product_terms": [
+      "Oracle Cloud",
+      "OCI",
+      "database",
+      "ERP",
+      "NetSuite",
+      "Fusion Cloud",
+      "AI infrastructure",
+      "数据库",
+      "云服务",
+      "企业软件"
+    ],
+    "industry_terms": [
+      "software",
+      "cloud",
+      "database",
+      "enterprise software",
+      "软件",
+      "云计算",
+      "数据库",
+      "企业软件"
+    ],
+    "peer_terms": [
+      "Microsoft",
+      "Azure",
+      "Amazon Web Services",
+      "AWS",
+      "Google Cloud",
+      "SAP",
+      "Salesforce",
+      "Snowflake"
+    ]
+  },
+  "SNDK": {
+    "company_terms": [
+      "SanDisk",
+      "Sandisk Corporation",
+      "San Disk",
+      "闪迪"
+    ],
+    "product_terms": [
+      "NAND",
+      "DRAM",
+      "flash",
+      "flash storage",
+      "memory",
+      "storage",
+      "SSD",
+      "solid state drive",
+      "闪存",
+      "存储",
+      "内存",
+      "固态硬盘",
+      "存储芯片",
+      "存储器"
+    ],
+    "industry_terms": [
+      "memory",
+      "storage",
+      "semiconductor",
+      "半导体",
+      "芯片",
+      "NAND",
+      "DRAM",
+      "闪存",
+      "存储"
+    ],
+    "peer_terms": [
+      "Micron",
+      "Samsung",
+      "Kioxia",
+      "SK Hynix",
+      "NAND",
+      "DRAM",
+      "铠侠",
+      "美光",
+      "三星"
+    ]
+  },
+  "TSLA": {
+    "company_terms": [
+      "Tesla",
+      "Tesla Inc",
+      "特斯拉"
+    ],
+    "product_terms": [
+      "EV",
+      "electric vehicle",
+      "robotaxi",
+      "FSD",
+      "Model Y",
+      "Megapack"
+    ],
+    "industry_terms": [
+      "automotive",
+      "automobile",
+      "汽车",
+      "电动车",
+      "自动驾驶"
+    ],
+    "peer_terms": [
+      "BYD",
+      "比亚迪",
+      "Rivian",
+      "Lucid",
+      "Panasonic",
+      "宁德时代",
+      "CATL",
+      "lithium",
+      "锂电池"
+    ]
+  },
+  "XOM": {
+    "company_terms": [
+      "Exxon Mobil",
+      "ExxonMobil",
+      "Exxon Mobil Corporation",
+      "埃克森美孚"
+    ],
+    "product_terms": [
+      "oil",
+      "natural gas",
+      "LNG",
+      "upstream",
+      "downstream",
+      "refining",
+      "Permian",
+      "Guyana",
+      "原油",
+      "天然气",
+      "液化天然气",
+      "炼油"
+    ],
+    "industry_terms": [
+      "energy",
+      "oil and gas",
+      "integrated oil",
+      "refining",
+      "能源",
+      "石油天然气",
+      "油气",
+      "炼化"
+    ],
+    "peer_terms": [
+      "Chevron",
+      "CVX",
+      "Shell",
+      "BP",
+      "ConocoPhillips",
+      "OPEC",
+      "WTI",
+      "Brent",
+      "雪佛龙",
+      "欧佩克"
+    ]
+  }
+}
